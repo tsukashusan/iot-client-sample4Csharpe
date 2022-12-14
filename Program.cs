@@ -45,8 +45,8 @@ async Task SendDeviceToCloudMessagesAsync()
             {
                 messageId = _messageId++,
                 deviceId = DeviceId,
-                temperature = currentTemperature,
-                humidity = currentHumidity
+                temperature = Math.Round(currentTemperature, 2),
+                humidity = Math.Round(currentHumidity, 2)
             };
             var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
             var message = new TelemetryMessage(Encoding.ASCII.GetBytes(messageString));
