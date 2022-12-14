@@ -2,9 +2,10 @@
 using Microsoft.Azure.Devices.Client;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 
 // See https://aka.ms/new-console-template for more information
-Console.WriteLine("IoT Client Start!");
 
 const string DeviceId = "myFirstDevice4Csharp";
 const double MinTemperature = 20;
@@ -16,9 +17,17 @@ IConfiguration configuration = new ConfigurationBuilder()
       .AddJsonFile("appsettings.json", true, true)
       .Build();
 
-var section = configuration.GetSection("iothub");
 
-IotHubDeviceClient _deviceClient = new IotHubDeviceClient(section["ConnectionString"]);
+var appInsightSection = configuration.GetSection("ApplicationInsight");
+
+var telemetryconfiguration = TelemetryConfiguration.CreateDefault();
+telemetryconfiguration.ConnectionString = appInsightSection["ConnectionString"];
+var telemetryClient = new TelemetryClient(telemetryconfiguration);
+Console.WriteLine("IoT Client Start!");
+telemetryClient.TrackTrace("Hello World!");
+
+var iotSection = configuration.GetSection("iothub");
+IotHubDeviceClient _deviceClient = new IotHubDeviceClient(iotSection["ConnectionString"]);
 
 await SendDeviceToCloudMessagesAsync();
 
@@ -44,6 +53,7 @@ async Task SendDeviceToCloudMessagesAsync()
             message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
             await _deviceClient.SendTelemetryAsync(message);
             Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
+            telemetryClient.TrackTrace($"{DateTime.Now} > Sending message: {messageString}");
             await Task.Delay(500);
         }
         catch (Exception e)
@@ -51,6 +61,7 @@ async Task SendDeviceToCloudMessagesAsync()
             Console.WriteLine(e.Message);
             Console.WriteLine(e.StackTrace);
             Console.WriteLine("Suspend:{0} msec", 1000);
+            telemetryClient.TrackException(e);
             await Task.Delay(1000);
             _messageId = 0;
             continue;
