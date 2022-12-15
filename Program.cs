@@ -102,11 +102,12 @@ async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batc
                     humidity = Math.Round(currentHumidity, 2)
                 };
                 var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
-                var message = new TelemetryMessage(Encoding.ASCII.GetBytes(messageString));
+                byte[] messagebytearray = Encoding.UTF8.GetBytes(messageString);
+                var message = new TelemetryMessage(messagebytearray);
                 message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
                 Console.WriteLine($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
                 telemetryClient.TrackTrace($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
-                await memStream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(messageString));
+                await memStream.WriteAsync(Encoding.UTF8.GetBytes(messageString + Environment.NewLine));
                 
                 if ((_messageId != 0 && _messageId % batchSize == 0) || _messageId == ulong.MaxValue)
                 {
