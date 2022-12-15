@@ -27,7 +27,6 @@ var iotSection = configuration.GetSection("iothub");
 var mode = iotSection["mode"];
 IotHubDeviceClient _deviceClient = new IotHubDeviceClient(iotSection["ConnectionString"]);
 var devicename = iotSection["deviceName"];
-await SendDeviceToCloudMessagesAsync();
 var fileNamePrefix = iotSection["fileNamePrefix"];
 var batchSize = iotSection["batchSize"];
 
@@ -101,9 +100,8 @@ async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batc
             var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
             var message = new TelemetryMessage(Encoding.ASCII.GetBytes(messageString));
             message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
-
-            Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
-            telemetryClient.TrackTrace($"{DateTime.Now} > Sending message: {messageString}");
+            Console.WriteLine($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
+            telemetryClient.TrackTrace($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
             await write2File(messageString, fileName);
             if ((_messageId != 0 && _messageId % batchSize == 0) || _messageId == ulong.MaxValue)
             {
