@@ -82,8 +82,9 @@ async Task SendDeviceToCloudMessagesAsync()
 async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batchSize)
 {
     await _deviceClient.OpenAsync();
-    string fileName = $"{fileNamePrefix}_{DateTime.Now.ToString("yyyyMMddHHmmssSSS")}.txt";
-    while (true)
+    Func<string, string> getFileName = (prefix) =>  $"{prefix}_{DateTime.Now.ToString("yyyyMMddHHmmssSSS")}.json";
+    string fileName = getFileName(fileNamePrefix);
+    while(true)
     {
         try
         {
@@ -125,7 +126,7 @@ async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batc
                 telemetryClient.TrackTrace(msg);
                  Console.WriteLine(msg);
                 deleteFile(fileName);
-                fileName = $"{fileNamePrefix}_{DateTime.Now.ToString("yyyyMMddHHmmssSSS")}.txt";
+                fileName = getFileName(fileNamePrefix);
             }
             await Task.Delay(500);
         }
@@ -140,6 +141,7 @@ async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batc
             continue;
         }
     }
+    
     async Task write2File(string message, string fileName)
     {
         // Set a variable to the Documents path.
