@@ -4,6 +4,8 @@ using Newtonsoft.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Extensibility;
+using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
 
 const double MinTemperature = 20;
 const double MinHumidity = 60;
@@ -81,37 +83,43 @@ async Task SendDeviceToCloudMessagesAsync()
 async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batchSize)
 {
     await _deviceClient.OpenAsync();
-    Func<string, string> getFileName = (prefix) =>  $"{prefix}_{DateTime.Now.ToString("yyyyMMddHHmmssSSS")}.json";
+    Func<string, string> getFileName = (prefix) => $"{prefix}_{DateTime.Now.ToString("yyyyMMddHHmmssfff")}.json";
     string fileName = getFileName(fileNamePrefix);
-    while(true)
+    using (MemoryStream memStream = new MemoryStream(10240))
     {
-        try
+        while (true)
         {
-            var currentTemperature = MinTemperature + Rand.NextDouble() * 15;
-            var currentHumidity = MinHumidity + Rand.NextDouble() * 20;
-            if (_messageId == ulong.MaxValue) _messageId = 0;
-            var telemetryDataPoint = new
+            try
             {
-                messageId = _messageId++,
-                deviceId = devicename,
-                temperature = Math.Round(currentTemperature, 2),
-                humidity = Math.Round(currentHumidity, 2)
-            };
-            var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
-            var message = new TelemetryMessage(Encoding.ASCII.GetBytes(messageString));
-            message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
-            Console.WriteLine($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
-            telemetryClient.TrackTrace($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
-            await write2File(messageString, fileName);
-            if ((_messageId != 0 && _messageId % batchSize == 0) || _messageId == ulong.MaxValue)
-            {
-                var fileUploadSasUriRequest = new FileUploadSasUriRequest("");
+                var currentTemperature = MinTemperature + Rand.NextDouble() * 15;
+                var currentHumidity = MinHumidity + Rand.NextDouble() * 20;
+                if (_messageId == ulong.MaxValue) _messageId = 0;
+                var telemetryDataPoint = new
+                {
+                    messageId = _messageId++,
+                    deviceId = devicename,
+                    temperature = Math.Round(currentTemperature, 2),
+                    humidity = Math.Round(currentHumidity, 2)
+                };
+                var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
+                var message = new TelemetryMessage(Encoding.ASCII.GetBytes(messageString));
+                message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
+                Console.WriteLine($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
+                telemetryClient.TrackTrace($"{DateTime.Now} > Write message 4 batch {fileName}: {messageString}");
+                await memStream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(messageString));
+                
+                if ((_messageId != 0 && _messageId % batchSize == 0) || _messageId == ulong.MaxValue)
+                {
+                    var fileUploadSasUriRequest = new FileUploadSasUriRequest(fileName);
 
-                // Lines removed for clarity
-                FileUploadSasUriResponse sasUri = await _deviceClient.GetFileUploadSasUriAsync(fileUploadSasUriRequest);
-                Uri uploadUri = sasUri.GetBlobUri();
+                    // Lines removed for clarity
+                    FileUploadSasUriResponse sasUri = await _deviceClient.GetFileUploadSasUriAsync(fileUploadSasUriRequest);
+                    Uri uploadUri = sasUri.GetBlobUri();
 
-                var successfulFileUploadCompletionNotification = new FileUploadCompletionNotification(sasUri.CorrelationId, true)
+                    var blockBlobClient = new BlockBlobClient(uploadUri);
+                    memStream.Position = 0;
+                    await blockBlobClient.UploadAsync(memStream);
+                    var successfulFileUploadCompletionNotification = new FileUploadCompletionNotification(sasUri.CorrelationId, true)
                 {
                     // Optional, user defined status code. Will be present when service client receives this file upload notification
                     StatusCode = 200,
@@ -119,42 +127,26 @@ async Task SendDeviceToCloudMessagesAsync4Batch(string fileNamePrefix, uint batc
                     // Optional, user-defined status description. Will be present when service client receives this file upload notification
                     StatusDescription = "Success"
                 };
-                await _deviceClient.CompleteFileUploadAsync(successfulFileUploadCompletionNotification);
-                var msg = $"upload {fileName} successful!";
-                telemetryClient.TrackTrace(msg);
-                 Console.WriteLine(msg);
-                deleteFile(fileName);
-                fileName = getFileName(fileNamePrefix);
+                    await _deviceClient.CompleteFileUploadAsync(successfulFileUploadCompletionNotification);
+                    var msg = $"upload {fileName} successful!";
+                    telemetryClient.TrackTrace(msg);
+                    Console.WriteLine(msg);
+                    await memStream.FlushAsync();
+                    memStream.Position = 0;
+                    fileName = getFileName(fileNamePrefix);
+                }
+                await Task.Delay(500);
             }
-            await Task.Delay(500);
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                Console.WriteLine(e.StackTrace);
+                Console.WriteLine("Suspend:{0} msec", 1000);
+                telemetryClient.TrackException(e);
+                await Task.Delay(1000);
+                _messageId = 0;
+                continue;
+            }
         }
-        catch (Exception e)
-        {
-            Console.WriteLine(e.Message);
-            Console.WriteLine(e.StackTrace);
-            Console.WriteLine("Suspend:{0} msec", 1000);
-            telemetryClient.TrackException(e);
-            await Task.Delay(1000);
-            _messageId = 0;
-            continue;
-        }
-    }
-    
-    async Task write2File(string message, string fileName)
-    {
-        // Set a variable to the Documents path.
-        string docPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-
-        // Write the specified text asynchronously to a new file named "WriteTextAsync.txt".
-        using (StreamWriter outputFile = new StreamWriter(Path.Combine(docPath, fileName), true))
-        {
-            await outputFile.WriteAsync(message);
-        }
-    }
-    void deleteFile(string fileName)
-    {
-        // Set a variable to the Documents path.
-        string docPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        File.Delete(Path.Combine(docPath, fileName));
     }
 }
