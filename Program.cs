@@ -60,7 +60,7 @@ async Task SendDeviceToCloudMessagesAsync()
                 humidity = Math.Round(currentHumidity, 2)
             };
             var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
-            var message = new TelemetryMessage(messageString);
+            var message = new TelemetryMessage(telemetryDataPoint);
             message.Properties.Add("temperatureAlert", (currentTemperature > 30) ? "true" : "false");
             await _deviceClient.SendTelemetryAsync(message);
             Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
